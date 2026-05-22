@@ -4,11 +4,11 @@ const UPSTREAM_URL   = "https://api.sarvam.ai/v1/chat/completions";
 const UPSTREAM_MODEL = "sarvam-105b";
 
 // sarvam-105b is a reasoning model — it spends tokens thinking before answering.
-// "low" effort minimises that overhead. 8192 gives room for both think + output.
-const MAX_TOKENS_CAP    = 8192;
+// "low" effort minimises that overhead. Keep the cap tight so the model stops sooner.
+const MAX_TOKENS_CAP    = 4096;
 const REASONING_EFFORT  = "low";
-// 3-minute fetch timeout — generous limit for Replit's long-running server.
-const FETCH_TIMEOUT_MS  = 180_000;
+// 2-minute fetch timeout — sufficient for tighter token budgets.
+const FETCH_TIMEOUT_MS  = 120_000;
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
