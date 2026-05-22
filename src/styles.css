@@ -87,5 +87,25 @@
 }
 
 /* Printable / PDF surface */
-.paper-sheet { background: #ffffff; color: #0b1020; font-family: "Inter", system-ui, sans-serif; }
-.paper-sheet h1, .paper-sheet h2, .paper-sheet h3 { font-family: "Space Grotesk", system-ui, sans-serif; color: #0b1020; }
+.paper-sheet {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(99,102,241,0.06), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(236,72,153,0.05), transparent 40%),
+    #ffffff;
+  color: #0b1020;
+  font-family: "Noto Serif Gujarati", "Noto Serif Devanagari", "Noto Sans Gujarati", "Noto Sans Devanagari", "Noto Sans Bengali", "Noto Sans Tamil", "Noto Sans Telugu", "Noto Sans Kannada", "Noto Sans Malayalam", "Noto Sans Gurmukhi", "Noto Sans Oriya", "Inter", system-ui, sans-serif;
+  font-feature-settings: "kern", "liga", "calt";
+  line-height: 1.7;
+  position: relative;
+  border: 1px solid #e5e7eb;
+}
+.paper-sheet h1, .paper-sheet h2, .paper-sheet h3 {
+  font-family: "Playfair Display", "Noto Serif Gujarati", "Noto Serif Devanagari", "Space Grotesk", system-ui, serif;
+  color: #0b1020;
+  letter-spacing: 0.01em;
+}
+.paper-sheet .ribbon {
+  height: 6px;
+  background: linear-gradient(90deg, #4f46e5, #ec4899, #f59e0b);
+  border-radius: 3px;
+}
