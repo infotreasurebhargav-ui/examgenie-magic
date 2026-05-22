@@ -311,13 +311,6 @@ function Home() {
             <div className="mx-auto max-w-5xl">
               {/* Hero (only when no paper) */}
               <div className="mb-8 text-center">
-                <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-400" />
-                  </span>
-                  Powered by Sarvam AI · Next-gen reasoning
-                </div>
                 <h1 className="text-3xl font-bold sm:text-5xl">
                   Craft exam papers in{" "}
                   <span className="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">

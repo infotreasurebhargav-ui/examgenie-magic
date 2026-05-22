@@ -88,10 +88,7 @@
 
 /* Printable / PDF surface */
 .paper-sheet {
-  background:
-    radial-gradient(circle at 0% 0%, rgba(99,102,241,0.06), transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(236,72,153,0.05), transparent 40%),
-    #ffffff;
+  background: #ffffff;
   color: #0b1020;
   font-family: "Noto Serif Gujarati", "Noto Serif Devanagari", "Noto Sans Gujarati", "Noto Sans Devanagari", "Noto Sans Bengali", "Noto Sans Tamil", "Noto Sans Telugu", "Noto Sans Kannada", "Noto Sans Malayalam", "Noto Sans Gurmukhi", "Noto Sans Oriya", "Inter", system-ui, sans-serif;
   font-feature-settings: "kern", "liga", "calt";
@@ -105,7 +102,5 @@
   letter-spacing: 0.01em;
 }
 .paper-sheet .ribbon {
-  height: 6px;
-  background: linear-gradient(90deg, #4f46e5, #ec4899, #f59e0b);
-  border-radius: 3px;
+  display: none;
 }

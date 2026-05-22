@@ -14,7 +14,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
         <div className="ribbon mb-5" />
         <div className="text-center">
           <h1 className="text-3xl font-extrabold uppercase tracking-wide">{meta.schoolName}</h1>
-          <div className="mt-1 text-base font-semibold text-[#4f46e5]">{meta.examName}</div>
+          <div className="mt-1 text-base font-semibold text-gray-700">{meta.examName}</div>
           <div className="mt-3 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.25em] text-gray-500">
             <span className="h-px w-10 bg-gray-300" /> Question Paper <span className="h-px w-10 bg-gray-300" />
           </div>
@@ -32,8 +32,8 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
       </div>
 
       {meta.instructions.length > 0 && (
-        <div data-pdf-section className="mt-5 rounded-lg border-l-4 border-[#4f46e5] bg-indigo-50/40 p-4 text-sm">
-          <div className="mb-1 font-semibold text-[#4f46e5]">General Instructions</div>
+        <div data-pdf-section className="mt-5 rounded-lg border-l-4 border-gray-400 bg-gray-50 p-4 text-sm">
+          <div className="mb-1 font-semibold text-gray-700">General Instructions</div>
           <ol className="ml-5 list-decimal space-y-1">
             {meta.instructions.map((s, i) => (<li key={i}>{s}</li>))}
           </ol>
@@ -44,7 +44,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
         {questions.map((q, i) => (
           <li key={q.id} data-pdf-section className="break-inside-avoid rounded-md border border-gray-200/70 bg-white/60 p-3">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#4f46e5] text-xs font-bold text-white">{i + 1}</span>
+              <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-800 text-xs font-bold text-white">{i + 1}</span>
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-3">
                   <p className="leading-relaxed">{q.text}</p>
@@ -54,7 +54,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
                   <ol className="ml-1 mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2" type="A">
                     {q.options.map((opt, j) => (
                       <li key={j} className="flex gap-2">
-                        <span className="font-semibold text-[#4f46e5]">{String.fromCharCode(65 + j)}.</span>
+                        <span className="font-semibold text-gray-700">{String.fromCharCode(65 + j)}.</span>
                         <span>{opt}</span>
                       </li>
                     ))}
