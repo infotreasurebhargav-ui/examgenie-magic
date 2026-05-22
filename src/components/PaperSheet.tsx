@@ -40,7 +40,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
         </div>
       )}
 
-      <ol className="mt-6 space-y-5">
+      <ol className="mt-6 list-none space-y-5">
         {questions.map((q, i) => (
           <li key={q.id} data-pdf-section className="break-inside-avoid rounded-md border border-gray-200/70 bg-white/60 p-3">
             <div className="flex items-start gap-3">

@@ -658,27 +658,6 @@ function Home() {
                           <Link2 className="mr-1.5 h-4 w-4" />
                           {copied ? "Copied!" : "Copy Test Link"}
                         </Button>
-                        <Button
-                          onClick={() => handleDownloadPdf(false)}
-                          disabled={pdfLoading}
-                          className="bg-indigo-600 hover:bg-indigo-500 text-white"
-                        >
-                          {pdfLoading
-                            ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                            : <FileText className="mr-1.5 h-4 w-4" />}
-                          Question Paper PDF
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleDownloadPdf(true)}
-                          disabled={pdfLoading}
-                          className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
-                        >
-                          {pdfLoading
-                            ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                            : <KeyRound className="mr-1.5 h-4 w-4" />}
-                          With Answer Key
-                        </Button>
                       </div>
                     </div>
                   </div>

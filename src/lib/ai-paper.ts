@@ -50,15 +50,16 @@ RULES:
 
 // ─── Batch token budget ───────────────────────────────────────────────────────
 
-// Per-batch budget: reasoning overhead (1800) + output tokens + structural (300)
-// Each batch only generates ONE question type so budgets are small and fast.
-const BATCH_REASONING_OVERHEAD = 1800;
+// Per-batch budget: reasoning overhead (1000) + output tokens + structural (200)
+// Reduced from original 1800 overhead to speed up generation while still
+// leaving enough room for the model to produce complete answers.
+const BATCH_REASONING_OVERHEAD = 1000;
 
 function calcBatchBudget(
   typeSpec: { type: QuestionType; count: number; marksEach: number },
 ): number {
   const outputTokens = typeSpec.count * (TOKENS_PER_QUESTION[typeSpec.type] ?? 150);
-  return Math.min(4096, Math.max(2200, outputTokens + BATCH_REASONING_OVERHEAD + 300));
+  return Math.min(4096, Math.max(1800, outputTokens + BATCH_REASONING_OVERHEAD + 200));
 }
 
 // ─── Batch prompt builder ─────────────────────────────────────────────────────
