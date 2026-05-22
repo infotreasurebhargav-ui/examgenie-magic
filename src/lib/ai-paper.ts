@@ -37,7 +37,8 @@ function calcTokenBudget(brief: GenerateBrief): number {
     0,
   );
   // 800 overhead: system prompt injection, JSON braces, instructions, translatedHeader
-  return Math.min(8000, Math.max(2500, questionTokens + 800));
+  // Hard ceiling at 2048 — the max allowed by the Sarvam starter plan.
+  return Math.min(2048, Math.max(800, questionTokens + 800));
 }
 
 // ─── System prompt ────────────────────────────────────────────────────────────

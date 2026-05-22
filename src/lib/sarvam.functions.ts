@@ -5,9 +5,8 @@ const UPSTREAM_URL = "https://api.sarvam.ai/v1/chat/completions";
 const UPSTREAM_KEY = process.env.SARVAM_API_KEY ?? "";
 const UPSTREAM_MODEL = "sarvam-m";
 
-// Raised from 2048 → 8192 so large papers don't get silently truncated.
-// A 20-question paper with long answers can easily need 4000+ tokens.
-const MAX_TOKENS_CAP = 8192;
+// Capped at 2048 — the maximum allowed by the Sarvam starter plan.
+const MAX_TOKENS_CAP = 2048;
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
