@@ -50,13 +50,70 @@ Additional notes: ${b.extra || "none"}
 Return JSON only.`;
 }
 
+function repairJson(s: string): string {
+  let inStr = false;
+  let esc = false;
+  const stack: string[] = [];
+  let lastSafe = -1;
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    out += c;
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === "{") stack.push("}");
+    else if (c === "[") stack.push("]");
+    else if (c === "}" || c === "]") {
+      stack.pop();
+      if (stack.length > 0) lastSafe = out.length;
+    }
+  }
+  if (inStr || stack.length > 0) {
+    if (lastSafe > 0) out = out.slice(0, lastSafe);
+    inStr = false; esc = false;
+    const st2: string[] = [];
+    for (let i = 0; i < out.length; i++) {
+      const c = out[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') inStr = true;
+      else if (c === "{") st2.push("}");
+      else if (c === "[") st2.push("]");
+      else if (c === "}" || c === "]") st2.pop();
+    }
+    if (inStr) out += '"';
+    while (st2.length) out += st2.pop();
+  }
+  return out;
+}
+
 function extractJson(s: string): unknown {
   const fenced = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const raw = (fenced ? fenced[1] : s).trim();
   const start = raw.indexOf("{");
+  if (start === -1) throw new Error("Bad AI output");
   const end = raw.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("Bad AI output");
-  return JSON.parse(raw.slice(start, end + 1));
+  const slice = end > start ? raw.slice(start, end + 1) : raw.slice(start);
+  try {
+    return JSON.parse(slice);
+  } catch {
+    const repaired = repairJson(slice);
+    try {
+      return JSON.parse(repaired);
+    } catch (e) {
+      console.error("JSON repair failed", e, repaired.slice(0, 800));
+      throw new Error("AI returned malformed output. Try fewer questions and retry.");
+    }
+  }
 }
 
 export async function generatePaper(brief: GenerateBrief): Promise<Paper> {
