@@ -25,7 +25,7 @@ export const aiChat = createServerFn({ method: "POST" })
         messages: data.messages,
         temperature: data.temperature ?? 0.4,
         top_p: 1,
-        max_tokens: data.max_tokens ?? 3000,
+        max_tokens: Math.min(data.max_tokens ?? 2000, MAX_TOKENS_CAP),
       }),
     });
 
