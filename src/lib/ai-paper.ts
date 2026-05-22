@@ -16,29 +16,35 @@ export interface GenerateBrief {
   extra?: string;
 }
 
-const SYS = `You are an expert academic question paper author and a native-level writer of the target language. You ALWAYS reply with a single valid JSON object only, no markdown, no commentary. Schema:
+const SYS = `You are a senior academic question-paper author and a NATIVE-LEVEL writer of the target language (Gujarati, Hindi, Marathi, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, Odia, English, etc.).
+Reply with a SINGLE valid JSON object only — no markdown, no commentary. Schema:
 {
   "instructions": string[],
+  "translatedHeader"?: { "schoolName"?: string, "examName"?: string, "className"?: string, "subject"?: string },
   "questions": [
     { "type": "mcq"|"short"|"long"|"truefalse"|"fillblank", "text": string, "marks": number, "options"?: [string,string,string,string], "answer": string }
   ]
 }
 For mcq: options has exactly 4 plausible choices; answer is one of "A","B","C","D".
-For truefalse: answer is "True" or "False" (or the target language equivalent like "સાચું"/"ખોટું", "सही"/"गलत").
+For truefalse: answer in target language ("સાચું"/"ખોટું", "सही"/"गलत", "True"/"False").
 For fillblank: use ____ in text; answer is the missing word/phrase.
 For short/long: answer is a concise model answer.
-LANGUAGE RULES (CRITICAL):
-- Write EVERY field (instructions, text, options, answer) in the requested language using its native script.
-- Use grammatically correct, exam-appropriate, formal academic register native to that language. No transliteration, no English loanwords unless they are standard terms (e.g., proper nouns).
-- For Gujarati/Hindi/Marathi/Bengali/Tamil/Telugu/Kannada/Malayalam/Punjabi/Odia: use proper case markers (વિભક્તિ/कारक), correct gender-number agreement, idiomatic phrasing, and standard textbook style.
-- Proofread mentally for spelling, sandhi, postpositions, and verb conjugation before emitting.
-Questions must be original, syllabus-appropriate, unambiguous, and free of bias.`;
+
+LANGUAGE RULES (CRITICAL — ZERO TOLERANCE):
+- Write EVERY field (instructions, text, options, answer, translatedHeader) in the requested language using its native script.
+- Also TRANSLATE the header values (schoolName, examName, className, subject) into the target language inside translatedHeader. Example for Gujarati: subject "Mathematics" -> "ગણિત", "Class 10" -> "ધોરણ ૧૦", "Mid-Term Examination" -> "પ્રથમ સત્ર પરીક્ષા". Keep proper nouns (school names) in original script unless they have a well-known native form.
+- Use grammatically correct, exam-board-quality, formal academic register. No transliteration. No Hinglish/Gujlish. No English loanwords unless they are standard technical terms.
+- For Gujarati specifically: use proper વિભક્તિ (case markers: -નો/-ની/-નું/-માં/-થી/-ને), correct જાતિ-વચન agreement, સંધિ rules, idiomatic textbook phrasing matching GSEB/NCERT style. Numbers in Gujarati numerals (૧૨૩૪૫૬૭૮૯૦) where natural.
+- For Hindi/Marathi: proper कारक, लिंग-वचन agreement, मात्रा correctness, NCERT textbook register.
+- Mentally proofread every sentence for spelling, sandhi, postpositions, and verb conjugation before emitting.
+Questions must be original, syllabus-appropriate, unambiguous, age-appropriate, and free of bias.`;
 
 function buildPrompt(b: GenerateBrief): string {
   const breakdown = b.types
     .map((t) => `- ${t.count} ${t.type.toUpperCase()} questions, ${t.marksEach} marks each`)
     .join("\n");
   const lang = b.language || "English";
+  const nonEnglish = lang.toLowerCase() !== "english";
   return `Create a question paper.
 School: ${b.schoolName}
 Class: ${b.className}
@@ -46,7 +52,10 @@ Subject: ${b.subject}
 Exam: ${b.examName}
 Duration: ${b.durationMinutes} minutes
 Total Marks: ${b.totalMarks}
-OUTPUT LANGUAGE: ${lang}. Write ALL text (instructions, questions, options, answers) in ${lang} using its native script. Use formal, grammatically perfect, textbook-quality ${lang}. Do not mix English unless the term is a standard proper noun.
+
+OUTPUT LANGUAGE: ${lang}.
+${nonEnglish ? `Write ALL text (instructions, questions, options, answers) in ${lang} using its native script. Use formal, grammatically perfect, textbook-quality ${lang}. DO NOT mix English. ALSO populate "translatedHeader" with ${lang} translations of schoolName, examName, className and subject.` : ""}
+
 Difficulty: ${b.difficulty || "mixed"}
 Topics / syllabus focus: ${b.topics || "general syllabus"}
 Question breakdown:
@@ -135,17 +144,19 @@ export async function generatePaper(brief: GenerateBrief): Promise<Paper> {
   });
   const parsed = extractJson(content) as {
     instructions?: string[];
+    translatedHeader?: { schoolName?: string; examName?: string; className?: string; subject?: string };
     questions: Array<Omit<Question, "id">>;
   };
   const questions: Question[] = (parsed.questions || []).map((q) => ({ ...q, id: newId() }));
+  const th = parsed.translatedHeader || {};
   const paper: Paper = {
     id: newId(),
     createdAt: Date.now(),
     meta: {
-      schoolName: brief.schoolName,
-      className: brief.className,
-      subject: brief.subject,
-      examName: brief.examName,
+      schoolName: th.schoolName || brief.schoolName,
+      className: th.className || brief.className,
+      subject: th.subject || brief.subject,
+      examName: th.examName || brief.examName,
       durationMinutes: brief.durationMinutes,
       totalMarks: brief.totalMarks,
       instructions: parsed.instructions || [
