@@ -7,9 +7,8 @@ const UPSTREAM_MODEL = "sarvam-105b";
 // "low" effort minimises that overhead. 8192 gives room for both think + output.
 const MAX_TOKENS_CAP    = 8192;
 const REASONING_EFFORT  = "low";
-// 55 s fetch timeout — Vercel function maxDuration is 60 s, so this leaves a
-// small buffer to return a clean error instead of a hard function timeout.
-const FETCH_TIMEOUT_MS  = 55_000;
+// 3-minute fetch timeout — generous limit for Replit's long-running server.
+const FETCH_TIMEOUT_MS  = 180_000;
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
