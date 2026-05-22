@@ -31,75 +31,42 @@ const TOKENS_PER_QUESTION: Record<QuestionType, number> = {
   long: 400,      // question + detailed model answer
 };
 
-// sarvam-105b is a reasoning model — it uses internal "thinking" tokens before
-// producing output. Even with reasoning_effort:"low" it consumes ~1500–2500
-// tokens for thinking. We add a 2500-token overhead on top of the output
-// budget so the model has room to actually emit the JSON after reasoning.
-const REASONING_OVERHEAD = 2500;
-
-function calcTokenBudget(brief: GenerateBrief): number {
-  const questionTokens = brief.types.reduce(
-    (sum, t) => sum + t.count * (TOKENS_PER_QUESTION[t.type] ?? 150),
-    0,
-  );
-  // 800 structural overhead: JSON braces, instructions array, translatedHeader
-  // + 2500 reasoning overhead for the model's internal chain-of-thought
-  // Hard ceiling at 8192 (raised from 2048 — reasoning models need more).
-  return Math.min(8192, Math.max(3000, questionTokens + 800 + REASONING_OVERHEAD));
-}
-
 // ─── System prompt ────────────────────────────────────────────────────────────
 
-const BASE_SYSTEM = `You are a senior academic examiner and a NATIVE-LEVEL writer of the requested language.
-Your ONLY output is a single valid JSON object — no markdown, no prose, no code fences, no comments.
+const BASE_SYSTEM = `You are a senior academic examiner. Output ONLY a JSON object — no markdown, no text outside JSON.
 
-JSON SCHEMA (follow exactly):
-{
-  "instructions": string[],          // 3–5 exam instructions in the output language
-  "translatedHeader": {              // translate school/exam/class/subject into the output language
-    "schoolName": string,
-    "examName": string,
-    "className": string,
-    "subject": string
-  },
-  "questions": [                     // array of question objects
-    {
-      "type": "mcq"|"short"|"long"|"truefalse"|"fillblank",
-      "text": string,                // question text — never empty
-      "marks": number,               // marks for this question
-      "options": [A, B, C, D],       // ONLY for mcq — EXACTLY 4 strings
-      "answer": string               // see rules below
-    }
-  ]
+SCHEMA:
+{"instructions":["string × 3-5"],"translatedHeader":{"schoolName":"string","examName":"string","className":"string","subject":"string"},"questions":[{"type":"mcq|short|long|truefalse|fillblank","text":"string","marks":number,"options":["A","B","C","D"],"answer":"string"}]}
+
+RULES:
+- mcq: options = exactly 4 strings; answer = "A"/"B"/"C"/"D"
+- truefalse: answer = "True"/"False" (or native equivalent: Hindi सही/गलत, Gujarati સાચું/ખોટું, Marathi सत्य/असत्य, Tamil சரி/தவறு, Telugu నిజం/తప్పు, Bengali সত্য/মিথ্যা)
+- fillblank: text has exactly one "____"; answer = fill word
+- short: 2-4 sentence model answer
+- long: 5-8 sentence detailed model answer
+- ALL strings in the requested output language using native script
+- Questions must be original, age-appropriate, syllabus-accurate
+- MCQ distractors must be plausible`;
+
+// ─── Batch token budget ───────────────────────────────────────────────────────
+
+// Per-batch budget: reasoning overhead (1800) + output tokens + structural (300)
+// Each batch only generates ONE question type so budgets are small and fast.
+const BATCH_REASONING_OVERHEAD = 1800;
+
+function calcBatchBudget(
+  typeSpec: { type: QuestionType; count: number; marksEach: number },
+): number {
+  const outputTokens = typeSpec.count * (TOKENS_PER_QUESTION[typeSpec.type] ?? 150);
+  return Math.min(4096, Math.max(2200, outputTokens + BATCH_REASONING_OVERHEAD + 300));
 }
 
-ANSWER RULES (critical — zero tolerance):
-• mcq       → answer MUST be exactly one of: "A" "B" "C" "D"  (uppercase single letter)
-• truefalse → answer MUST be exactly "True" or "False" (English), OR the native-language equivalent below:
-              Hindi: "सही"/"गलत" | Gujarati: "સાચું"/"ખોટું" | Marathi: "सत्य"/"असत्य"
-              Tamil: "சரி"/"தவறு" | Telugu: "నిజం"/"తప్పు" | Kannada: "ಸರಿ"/"ತಪ್ಪು"
-              Bengali: "সত্য"/"মিথ্যা" | Malayalam: "ശരി"/"തെറ്റ്" | Punjabi: "ਸੱਚ"/"ਝੂਠ"
-• fillblank → text MUST contain exactly one "____"; answer is the word/phrase that fills it
-• short     → answer is a concise model answer (2–4 sentences)
-• long      → answer is a detailed model answer with all key points (5–8 sentences or bullet list)
+// ─── Batch prompt builder ─────────────────────────────────────────────────────
 
-LANGUAGE RULES (absolute):
-• Write EVERY string — instructions, text, options, answer, translatedHeader — in the requested output language.
-• Use the native script. No transliteration. No English loanwords (except universally accepted technical terms).
-• Gujarati: use proper વિભક્તિ, correct gender-number agreement, Gujarati numerals (૧,૨,…) where natural.
-• Hindi/Marathi: correct कारक, लिंग-वचन. Bengali: সাধু or চলিত consistently. Tamil: formal literary Tamil.
-• Proofread every sentence for grammar, spelling, sandhi, and verb conjugation before emitting.
-
-QUALITY RULES:
-• All questions must be original, unambiguous, age-appropriate, and syllabus-accurate.
-• MCQ distractors must be plausible — avoid obviously wrong options.
-• Difficulty must match the requested level; "mixed" means distribute across easy/medium/hard.
-• Do NOT repeat the same question twice or trivially rephrase it.`;
-
-// ─── Prompt builder ───────────────────────────────────────────────────────────
-
-function buildPrompt(
+function buildBatchPrompt(
   brief: GenerateBrief,
+  typeSpec: { type: QuestionType; count: number; marksEach: number },
+  isPrimary: boolean,
   attempt: number,
   validationErrors: string[],
 ): string {
@@ -107,52 +74,39 @@ function buildPrompt(
   const board = brief.board || "General";
   const boardCtx = getBoardContext(board);
   const isNonEnglish = lang.toLowerCase() !== "english";
+  const { type, count, marksEach } = typeSpec;
 
-  // Build exact required-count table — this is the single most important part
-  const countTable = brief.types
-    .map((t) => `  • ${t.count} × ${t.type.toUpperCase()} questions, ${t.marksEach} mark${t.marksEach > 1 ? "s" : ""} each  → subtotal ${t.count * t.marksEach} marks`)
-    .join("\n");
-
-  const totalExpected = brief.types.reduce((s, t) => s + t.count * t.marksEach, 0);
-
-  // On retry attempts, include the specific errors from previous attempt
   const retryBlock =
     attempt > 1 && validationErrors.length > 0
-      ? `\n⚠️ RETRY ATTEMPT ${attempt} — FIX THESE ERRORS FROM YOUR PREVIOUS RESPONSE:\n${validationErrors.map((e) => `  ✗ ${e}`).join("\n")}\nDo NOT repeat the same mistakes. Count every question type before outputting.\n`
+      ? `⚠️ RETRY ${attempt} — fix: ${validationErrors.map((e) => `✗ ${e}`).join("; ")}\n\n`
       : "";
 
-  return `${retryBlock}Generate a complete question paper with the following specification.
+  const schemaNote = isPrimary
+    ? `Return JSON: {"instructions":["..."],"translatedHeader":{"schoolName":"...","examName":"...","className":"...","subject":"..."},"questions":[...]}`
+    : `Return JSON: {"questions":[...]}`;
 
-━━━ PAPER DETAILS ━━━
-School:     ${brief.schoolName}
-Class:      ${brief.className}
-Subject:    ${brief.subject}
-Exam:       ${brief.examName}
-Duration:   ${brief.durationMinutes} minutes
-Total Marks: ${totalExpected}
-Difficulty: ${brief.difficulty || "mixed"}
-Topics:     ${brief.topics || "full syllabus / general"}
-Board:      ${boardCtx.fullName}
+  const typeGuide: Record<string, string> = {
+    mcq:       `Each MCQ: "type":"mcq","text":"...","marks":${marksEach},"options":["opt1","opt2","opt3","opt4"],"answer":"A"/"B"/"C"/"D"`,
+    short:     `Each SHORT: "type":"short","text":"...","marks":${marksEach},"answer":"2-4 sentence model answer"`,
+    long:      `Each LONG: "type":"long","text":"...","marks":${marksEach},"answer":"5-8 sentence detailed model answer"`,
+    truefalse: `Each T/F: "type":"truefalse","text":"...","marks":${marksEach},"answer":"True" or "False"`,
+    fillblank: `Each FILL: "type":"fillblank","text":"sentence with exactly one ____","marks":${marksEach},"answer":"fill word"`,
+  };
 
-━━━ BOARD-SPECIFIC GUIDELINES ━━━
-${boardCtx.style}
+  return `${retryBlock}Generate EXACTLY ${count} ${type.toUpperCase()} question${count > 1 ? "s" : ""} for this exam:
 
-━━━ OUTPUT LANGUAGE ━━━
-${lang}
-${isNonEnglish ? `ALL text (instructions, questions, options, answers, translatedHeader) must be written in ${lang} using its native script. Formal academic register. Zero English mixing except unavoidable technical terms.` : "Use formal, standard English."}
+School: ${brief.schoolName} | Class: ${brief.className} | Subject: ${brief.subject}
+Exam: ${brief.examName} | Board: ${boardCtx.fullName} | Difficulty: ${brief.difficulty || "mixed"}
+${brief.topics ? `Topics: ${brief.topics}` : ""}
+Language: ${lang}${isNonEnglish ? ` (native script, formal academic register, no English mixing)` : ""}
 
-━━━ QUESTION BREAKDOWN (MANDATORY — EXACT COUNTS) ━━━
-YOU MUST GENERATE EXACTLY THESE QUESTIONS — NOT ONE MORE, NOT ONE LESS:
-${countTable}
-TOTAL: ${brief.types.reduce((s, t) => s + t.count, 0)} questions | ${totalExpected} marks
+${typeGuide[type] ?? ""}
+Count rule: you MUST produce EXACTLY ${count} question${count > 1 ? "s" : ""} — not ${count - 1}, not ${count + 1}.
+${isPrimary ? `Also include ${lang} exam instructions (3-5 items) and translated header fields.` : ""}
+${brief.extra ? `Notes: ${brief.extra}` : ""}
 
-CRITICAL COUNT RULE: Before you output, count the number of questions of each type in your JSON.
-If any count is wrong, recount and fix it. The numbers above are non-negotiable.
-
-━━━ ADDITIONAL NOTES ━━━
-${brief.extra || "None"}
-
-Return JSON only. No markdown. No explanation. Start your response with { and end with }.`;
+${schemaNote}
+Output JSON only. Start with { end with }.`;
 }
 
 // ─── Raw AI output types ──────────────────────────────────────────────────────
@@ -221,23 +175,31 @@ function repairJson(s: string): string {
 }
 
 function extractJson(raw: string): RawOutput {
-  // Strip markdown code fences
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const text = (fenced ? fenced[1] : raw).trim();
+  // 1. Strip markdown code fences (```json … ``` or ``` … ```)
+  let text = raw.replace(/```(?:json)?\s*([\s\S]*?)```/gi, "$1").trim();
+
+  // 2. Strip any leading prose before the first { (model sometimes adds preamble)
   const start = text.indexOf("{");
   if (start === -1) throw new Error("AI response contained no JSON object.");
+  // Also trim trailing prose after the last }
   const end = text.lastIndexOf("}");
-  const slice = end > start ? text.slice(start, end + 1) : text.slice(start);
-  try {
-    return JSON.parse(slice) as RawOutput;
-  } catch {
-    const repaired = repairJson(slice);
-    try {
-      return JSON.parse(repaired) as RawOutput;
-    } catch (e) {
-      console.error("JSON repair failed", e, repaired.slice(0, 800));
-      throw new Error("AI returned malformed JSON. Retrying…");
-    }
+  text = end > start ? text.slice(start, end + 1) : text.slice(start);
+
+  // 3. Direct parse
+  try { return JSON.parse(text) as RawOutput; } catch { /* fall through */ }
+
+  // 4. Light sanitisation: remove JS-style comments and trailing commas
+  const sanitised = text
+    .replace(/\/\/[^\n]*/g, "")           // // comments
+    .replace(/\/\*[\s\S]*?\*\//g, "")     // /* block comments */
+    .replace(/,\s*([}\]])/g, "$1");       // trailing commas before } or ]
+  try { return JSON.parse(sanitised) as RawOutput; } catch { /* fall through */ }
+
+  // 5. Full structural repair for truncated / badly escaped responses
+  const repaired = repairJson(sanitised);
+  try { return JSON.parse(repaired) as RawOutput; } catch (e) {
+    console.error("JSON repair failed", e, repaired.slice(0, 800));
+    throw new Error("AI returned malformed JSON. Retrying…");
   }
 }
 
@@ -423,18 +385,31 @@ function buildPaper(
   };
 }
 
-// ─── Main export: generatePaper with retry loop ───────────────────────────────
+// ─── Single-batch generator (one question type, with retries) ─────────────────
 
 const MAX_ATTEMPTS = 3;
 
-export async function generatePaper(brief: GenerateBrief): Promise<Paper> {
-  const tokenBudget = calcTokenBudget(brief);
+interface BatchResult {
+  questions: Question[];
+  /** Only populated for the primary (first) batch */
+  raw?: RawOutput;
+}
+
+async function generateBatch(
+  brief: GenerateBrief,
+  typeSpec: { type: QuestionType; count: number; marksEach: number },
+  isPrimary: boolean,
+): Promise<BatchResult> {
+  const tokenBudget = calcBatchBudget(typeSpec);
+  // Build a single-type brief for validation purposes
+  const batchBrief: GenerateBrief = { ...brief, types: [typeSpec] };
+
   let validationErrors: string[] = [];
-  let lastRaw: RawOutput | null = null;
   let bestQuestions: Question[] = [];
+  let bestRaw: RawOutput | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const prompt = buildPrompt(brief, attempt, validationErrors);
+    const prompt = buildBatchPrompt(brief, typeSpec, isPrimary, attempt, validationErrors);
 
     let content: string;
     try {
@@ -444,13 +419,12 @@ export async function generatePaper(brief: GenerateBrief): Promise<Paper> {
             { role: "system", content: BASE_SYSTEM },
             { role: "user", content: prompt },
           ],
-          temperature: attempt === 1 ? 0.55 : 0.35, // lower temperature on retries for consistency
+          temperature: attempt === 1 ? 0.5 : 0.3,
           max_tokens: tokenBudget,
         },
       });
       content = result.content;
     } catch (e) {
-      // If it's a truncation error, throw immediately — no retry will help
       if (e instanceof Error && e.message.includes("truncated")) throw e;
       if (attempt === MAX_ATTEMPTS) throw e;
       validationErrors = [e instanceof Error ? e.message : "Network error — retrying"];
@@ -462,50 +436,78 @@ export async function generatePaper(brief: GenerateBrief): Promise<Paper> {
       raw = extractJson(content);
     } catch (e) {
       if (attempt === MAX_ATTEMPTS) {
-        throw new Error(
-          "AI returned unrecoverable invalid JSON after all retries. Please try again.",
-        );
+        if (bestQuestions.length > 0) return { questions: bestQuestions, raw: bestRaw ?? undefined };
+        throw new Error(`AI returned invalid JSON for ${typeSpec.type.toUpperCase()} questions after ${MAX_ATTEMPTS} retries. Please try again.`);
       }
       validationErrors = [e instanceof Error ? e.message : "Invalid JSON — retrying"];
       continue;
     }
 
-    lastRaw = raw;
-    const { questions, errors, warnings } = validateAndFix(raw, brief);
+    const { questions, errors, warnings } = validateAndFix(raw, batchBrief);
+    if (warnings.length > 0) console.info(`[batch:${typeSpec.type}] Auto-fixed:`, warnings.join("; "));
 
-    if (warnings.length > 0) {
-      console.info("[generatePaper] Auto-fixed:", warnings.join("; "));
+    if (questions.length > bestQuestions.length) {
+      bestQuestions = questions;
+      bestRaw = raw;
     }
 
     if (errors.length === 0) {
-      // ✅ Perfect — return immediately
-      return buildPaper(raw, questions, brief);
+      return { questions, raw: isPrimary ? raw : undefined };
     }
 
-    console.warn(`[generatePaper] Attempt ${attempt} validation errors:`, errors);
+    console.warn(`[batch:${typeSpec.type}] Attempt ${attempt} errors:`, errors);
     validationErrors = errors;
 
-    // Keep the best partial result in case all retries fail
-    if (questions.length > bestQuestions.length) {
-      bestQuestions = questions;
-    }
-
     if (attempt === MAX_ATTEMPTS) {
-      // If we have ANY questions, return a partial paper rather than crashing
       if (bestQuestions.length > 0) {
-        console.error("[generatePaper] Returning best partial result after all retries failed.");
-        return buildPaper(lastRaw!, bestQuestions, brief);
+        console.error(`[batch:${typeSpec.type}] Returning best partial (${bestQuestions.length}/${typeSpec.count})`);
+        return { questions: bestQuestions, raw: isPrimary ? (bestRaw ?? undefined) : undefined };
       }
-      throw new Error(
-        `Could not generate a valid paper after ${MAX_ATTEMPTS} attempts. ` +
-        `Last issues: ${errors.slice(0, 3).join("; ")}`,
-      );
+      throw new Error(`Could not generate ${typeSpec.type.toUpperCase()} questions after ${MAX_ATTEMPTS} attempts: ${errors.slice(0, 2).join("; ")}`);
     }
-    // else loop continues with validationErrors injected into next prompt
   }
 
-  // Should never reach here
-  throw new Error("Generation failed unexpectedly.");
+  throw new Error("Batch generation failed unexpectedly.");
+}
+
+// ─── Main export: generatePaper — parallel batches per question type ──────────
+
+export async function generatePaper(brief: GenerateBrief): Promise<Paper> {
+  if (brief.types.length === 0) throw new Error("No question types specified.");
+
+  // Fire all question-type batches in parallel.
+  // The largest type (most questions) is the "primary" batch and also returns
+  // instructions + translatedHeader (saves the model from doing this twice).
+  const sorted = [...brief.types].sort(
+    (a, b) => b.count * (TOKENS_PER_QUESTION[b.type] ?? 150)
+            - a.count * (TOKENS_PER_QUESTION[a.type] ?? 150),
+  );
+  const primaryType = sorted[0];
+
+  console.info(
+    `[generatePaper] Launching ${brief.types.length} parallel batch(es):`,
+    brief.types.map((t) => `${t.count}×${t.type}`).join(", "),
+  );
+
+  const batchPromises = brief.types.map((typeSpec) =>
+    generateBatch(brief, typeSpec, typeSpec === primaryType),
+  );
+
+  // Collect results — if any batch hard-fails, propagate immediately
+  const results = await Promise.all(batchPromises);
+
+  // Merge questions in the original type order (MCQ first, then short, then long…)
+  const allQuestions: Question[] = brief.types.flatMap((typeSpec, i) => results[i].questions);
+
+  // Get instructions/header from whichever batch was primary
+  const primaryResult = results[brief.types.indexOf(primaryType)];
+  const mergedRaw: RawOutput = {
+    instructions: primaryResult.raw?.instructions,
+    translatedHeader: primaryResult.raw?.translatedHeader,
+    questions: allQuestions.map((q) => q as unknown as RawQuestion),
+  };
+
+  return buildPaper(mergedRaw, allQuestions, brief);
 }
 
 // ─── Grading (unchanged logic, improved prompt) ───────────────────────────────
