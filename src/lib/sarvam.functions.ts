@@ -1,14 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 
 const UPSTREAM_URL   = "https://api.sarvam.ai/v1/chat/completions";
-const UPSTREAM_MODEL = "sarvam-105b";
+const UPSTREAM_MODEL = "sarvam-m";
 
-// sarvam-105b is a reasoning model — it spends tokens thinking before answering.
-// "low" effort minimises that overhead. Keep the cap tight so the model stops sooner.
-const MAX_TOKENS_CAP    = 4096;
-const REASONING_EFFORT  = "low";
-// 2-minute fetch timeout — sufficient for tighter token budgets.
-const FETCH_TIMEOUT_MS  = 120_000;
+// sarvam-m is a fast, compact model — no heavy reasoning overhead.
+const MAX_TOKENS_CAP   = 4096;
+// 90-second timeout — sarvam-m responds much faster than 105b.
+const FETCH_TIMEOUT_MS = 90_000;
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
@@ -59,7 +57,6 @@ export const aiChat = createServerFn({ method: "POST" })
           messages: data.messages,
           temperature: data.temperature ?? 0.4,
           max_tokens: Math.min(data.max_tokens ?? MAX_TOKENS_CAP, MAX_TOKENS_CAP),
-          reasoning_effort: REASONING_EFFORT,
           response_format: { type: "json_object" },
         }),
       });
