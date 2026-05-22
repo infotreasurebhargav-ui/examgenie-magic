@@ -1,21 +1,28 @@
 import { useState } from "react";
 import {
-  BookOpen, Plus, Trash2, Search, Download, Filter,
-  ChevronDown, ChevronUp,
+  BookOpen, Plus, Trash2, Search, Download,
+  ChevronDown, ChevronUp, Sparkles, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { getBankQuestions, addBankQuestions, deleteBankQuestion } from "@/lib/store";
+import { aiChat } from "@/lib/sarvam.functions";
 import type { BankQuestion } from "@/lib/app-types";
 
 const TYPE_LABELS: Record<string, string> = {
-  mcq: "MCQ", short: "Short", long: "Long",
-  truefalse: "True/False", fillblank: "Fill Blank",
+  mcq: "MCQ",
+  short: "Short Answer",
+  long: "Long Answer",
+  truefalse: "True / False",
+  fillblank: "Fill in the Blank",
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -26,6 +33,29 @@ const TYPE_COLORS: Record<string, string> = {
   fillblank: "bg-emerald-500/20 text-emerald-300",
 };
 
+const DIFFICULTY_LABELS: Record<string, string> = {
+  easy: "Easy", medium: "Medium", hard: "Hard",
+};
+
+type FormState = {
+  text: string;
+  type: string;
+  marks: string;
+  options: string[];
+  answer: string;
+  subject: string;
+  topic: string;
+  difficulty: string;
+  board: string;
+};
+
+const DEFAULT_FORM: FormState = {
+  text: "", type: "short", marks: "2",
+  options: ["", "", "", ""],
+  answer: "", subject: "", topic: "",
+  difficulty: "medium", board: "",
+};
+
 export function QuestionBankPage() {
   const [questions, setQuestions] = useState<BankQuestion[]>(() => getBankQuestions());
   const [search, setSearch] = useState("");
@@ -33,10 +63,9 @@ export function QuestionBankPage() {
   const [filterSubject, setFilterSubject] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({
-    text: "", type: "mcq", marks: "1", options: ["", "", "", ""],
-    answer: "", subject: "", topic: "", difficulty: "medium", board: "",
-  });
+  const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+  const [genQuestion, setGenQuestion] = useState(false);
+  const [genAnswer, setGenAnswer] = useState(false);
 
   const refresh = () => setQuestions(getBankQuestions());
 
@@ -60,14 +89,9 @@ export function QuestionBankPage() {
   };
 
   const handleAdd = () => {
-    if (!form.text.trim() || !form.subject.trim()) {
-      toast.error("Question text and subject are required");
-      return;
-    }
-    if (!form.answer.trim()) {
-      toast.error("Answer is required");
-      return;
-    }
+    if (!form.text.trim()) { toast.error("Question text is required"); return; }
+    if (!form.subject.trim()) { toast.error("Subject is required"); return; }
+    if (!form.answer.trim()) { toast.error("Answer is required"); return; }
     const q: Omit<BankQuestion, "id" | "createdAt"> = {
       text: form.text.trim(),
       type: form.type,
@@ -83,10 +107,7 @@ export function QuestionBankPage() {
     refresh();
     toast.success("Question added to bank");
     setDialogOpen(false);
-    setForm({
-      text: "", type: "mcq", marks: "1", options: ["", "", "", ""],
-      answer: "", subject: "", topic: "", difficulty: "medium", board: "",
-    });
+    setForm(DEFAULT_FORM);
   };
 
   const handleExport = () => {
@@ -109,8 +130,137 @@ export function QuestionBankPage() {
     toast.success("Exported question_bank.xlsx");
   };
 
+  // ── AI: Generate question text ──────────────────────────────────────────────
+  const handleGenerateQuestion = async () => {
+    if (!form.subject.trim()) {
+      toast.error("Please enter a Subject first so AI knows what to write about");
+      return;
+    }
+    setGenQuestion(true);
+    try {
+      const typeName = TYPE_LABELS[form.type] ?? form.type;
+      const context = [
+        form.subject && `Subject: ${form.subject}`,
+        form.topic && `Topic: ${form.topic}`,
+        form.board && `Board: ${form.board}`,
+        `Type: ${typeName}`,
+        `Difficulty: ${form.difficulty}`,
+        `Marks: ${form.marks}`,
+      ].filter(Boolean).join(", ");
+
+      const result = await aiChat({
+        data: {
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an expert school teacher. Generate exactly ONE exam question. " +
+                "Return ONLY the question text — no numbering, no explanation, no answer, no extra lines.",
+            },
+            {
+              role: "user",
+              content: `Generate a ${typeName} exam question. ${context}. Return only the question text.`,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 300,
+        },
+      });
+      const text = result.content.trim();
+      setForm((f) => ({ ...f, text }));
+      toast.success("Question generated!");
+    } catch {
+      toast.error("AI generation failed. Please try again.");
+    } finally {
+      setGenQuestion(false);
+    }
+  };
+
+  // ── AI: Generate model answer ───────────────────────────────────────────────
+  const handleGenerateAnswer = async () => {
+    if (!form.text.trim()) {
+      toast.error("Please enter the Question Text first");
+      return;
+    }
+    setGenAnswer(true);
+    try {
+      const typeName = TYPE_LABELS[form.type] ?? form.type;
+      const isMcq = form.type === "mcq";
+      const systemPrompt = isMcq
+        ? "You are an expert teacher. Given the MCQ question and its options, return ONLY the correct option letter (A, B, C, or D). Nothing else."
+        : "You are an expert teacher. Write a clear, concise model answer suitable for an exam mark scheme. Return only the answer text, no labels.";
+
+      const userContent = isMcq
+        ? `Question: ${form.text}\nOptions:\nA. ${form.options[0]}\nB. ${form.options[1]}\nC. ${form.options[2]}\nD. ${form.options[3]}\n\nWhich option is correct? Reply with only the letter.`
+        : `Question: ${form.text}\nType: ${typeName}, Marks: ${form.marks}${form.subject ? `, Subject: ${form.subject}` : ""}. Write the model answer.`;
+
+      const result = await aiChat({
+        data: {
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          temperature: 0.3,
+          max_tokens: 400,
+        },
+      });
+      setForm((f) => ({ ...f, answer: result.content.trim() }));
+      toast.success("Answer generated!");
+    } catch {
+      toast.error("AI generation failed. Please try again.");
+    } finally {
+      setGenAnswer(false);
+    }
+  };
+
+  // ── AI: Generate MCQ options ────────────────────────────────────────────────
+  const handleGenerateMcqOptions = async () => {
+    if (!form.text.trim()) {
+      toast.error("Please enter the Question Text first");
+      return;
+    }
+    setGenAnswer(true);
+    try {
+      const result = await aiChat({
+        data: {
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an expert teacher. Given an MCQ question, generate 4 answer options and identify the correct one. " +
+                "Respond ONLY as valid JSON: {\"options\":[\"...\",\"...\",\"...\",\"...\"],\"answer\":\"A\"}. No extra text.",
+            },
+            {
+              role: "user",
+              content: `MCQ Question: ${form.text}${form.subject ? ` (Subject: ${form.subject})` : ""}. Generate 4 options and the correct letter.`,
+            },
+          ],
+          temperature: 0.5,
+          max_tokens: 300,
+        },
+      });
+      const raw = result.content.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.options) && parsed.options.length === 4) {
+        setForm((f) => ({
+          ...f,
+          options: parsed.options,
+          answer: parsed.answer ?? f.answer,
+        }));
+        toast.success("MCQ options generated!");
+      } else {
+        toast.error("Could not parse AI response. Please try again.");
+      }
+    } catch {
+      toast.error("AI generation failed. Please try again.");
+    } finally {
+      setGenAnswer(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">Question Bank</h2>
@@ -126,7 +276,7 @@ export function QuestionBankPage() {
           </Button>
           <Button
             size="sm"
-            onClick={() => setDialogOpen(true)}
+            onClick={() => { setForm(DEFAULT_FORM); setDialogOpen(true); }}
             className="bg-indigo-600 hover:bg-indigo-500 text-white"
           >
             <Plus className="mr-1.5 h-4 w-4" /> Add Question
@@ -145,28 +295,33 @@ export function QuestionBankPage() {
             className="bg-white/5 border-white/10 pl-9 text-white placeholder:text-slate-500"
           />
         </div>
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 focus:outline-none"
-        >
-          <option value="all">All Types</option>
-          {types.map((t) => (
-            <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
-          ))}
-        </select>
-        <select
-          value={filterSubject}
-          onChange={(e) => setFilterSubject(e.target.value)}
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 focus:outline-none"
-        >
-          <option value="all">All Subjects</option>
-          {subjects.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+        <Select value={filterType} onValueChange={setFilterType}>
+          <SelectTrigger className="w-36 bg-white/5 border-white/10 text-slate-300 focus:ring-0">
+            <SelectValue placeholder="All Types" />
+          </SelectTrigger>
+          <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
+            <SelectItem value="all" className="focus:bg-white/10 focus:text-white">All Types</SelectItem>
+            {types.map((t) => (
+              <SelectItem key={t} value={t} className="focus:bg-white/10 focus:text-white">
+                {TYPE_LABELS[t] ?? t}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterSubject} onValueChange={setFilterSubject}>
+          <SelectTrigger className="w-40 bg-white/5 border-white/10 text-slate-300 focus:ring-0">
+            <SelectValue placeholder="All Subjects" />
+          </SelectTrigger>
+          <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
+            <SelectItem value="all" className="focus:bg-white/10 focus:text-white">All Subjects</SelectItem>
+            {subjects.map((s) => (
+              <SelectItem key={s} value={s} className="focus:bg-white/10 focus:text-white">{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
+      {/* Question list */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-white/3 py-16 text-center">
@@ -205,6 +360,9 @@ export function QuestionBankPage() {
                     {q.topic && (
                       <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-slate-400">{q.topic}</span>
                     )}
+                    {q.difficulty && (
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-slate-500 capitalize">{q.difficulty}</span>
+                    )}
                     <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400 font-semibold">{q.marks}M</span>
                   </div>
                 </div>
@@ -240,7 +398,7 @@ export function QuestionBankPage() {
                     <p className="text-sm text-emerald-400">{q.answer}</p>
                   </div>
                   {q.difficulty && (
-                    <p className="text-xs text-slate-500">Difficulty: {q.difficulty}</p>
+                    <p className="text-xs text-slate-500">Difficulty: <span className="capitalize">{q.difficulty}</span></p>
                   )}
                 </div>
               )}
@@ -249,35 +407,60 @@ export function QuestionBankPage() {
         )}
       </div>
 
-      {/* Add Question Dialog */}
+      {/* ── Add Question Dialog ─────────────────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-[#13131f] border-white/10 text-white sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#13131f] border-white/10 text-white sm:max-w-lg max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Question to Bank</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">Add Question to Bank</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div>
-              <label className="text-xs text-slate-400 mb-1.5 block">Question Text *</label>
-              <textarea
-                value={form.text}
-                onChange={(e) => setForm((f) => ({ ...f, text: e.target.value }))}
-                placeholder="Enter the question…"
-                rows={3}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
-              />
+
+          <div className="space-y-4 pt-1">
+
+            {/* ── Context row: Subject + Topic + Board (filled first for better AI) */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1.5 block">Subject *</label>
+                <Input
+                  value={form.subject}
+                  onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+                  placeholder="e.g. Mathematics"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1.5 block">Topic</label>
+                <Input
+                  value={form.topic}
+                  onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
+                  placeholder="e.g. Algebra"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1.5 block">Board</label>
+                <Input
+                  value={form.board}
+                  onChange={(e) => setForm((f) => ({ ...f, board: e.target.value }))}
+                  placeholder="e.g. CBSE"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600"
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+
+            {/* ── Type + Marks + Difficulty row */}
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-xs text-slate-400 mb-1.5 block">Type *</label>
-                <select
-                  value={form.type}
-                  onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                >
-                  {Object.entries(TYPE_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
+                <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white focus:ring-1 focus:ring-indigo-500">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
+                    {Object.entries(TYPE_LABELS).map(([k, v]) => (
+                      <SelectItem key={k} value={k} className="focus:bg-white/10 focus:text-white">{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1.5 block">Marks *</label>
@@ -288,82 +471,132 @@ export function QuestionBankPage() {
                   className="bg-white/5 border-white/10 text-white"
                 />
               </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1.5 block">Difficulty</label>
+                <Select value={form.difficulty} onValueChange={(v) => setForm((f) => ({ ...f, difficulty: v }))}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white focus:ring-1 focus:ring-indigo-500">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
+                    {Object.entries(DIFFICULTY_LABELS).map(([k, v]) => (
+                      <SelectItem key={k} value={k} className="focus:bg-white/10 focus:text-white">{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
+            {/* ── Question Text with AI button */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-slate-400">Question Text *</label>
+                <button
+                  type="button"
+                  onClick={handleGenerateQuestion}
+                  disabled={genQuestion}
+                  className="flex items-center gap-1.5 rounded-md bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/30 px-2.5 py-1 text-xs font-medium text-indigo-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {genQuestion
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Sparkles className="h-3 w-3" />}
+                  {genQuestion ? "Generating…" : "AI Generate"}
+                </button>
+              </div>
+              <textarea
+                value={form.text}
+                onChange={(e) => setForm((f) => ({ ...f, text: e.target.value }))}
+                placeholder={
+                  form.subject
+                    ? `Enter the question, or click "AI Generate" above…`
+                    : `Fill Subject above, then click "AI Generate" to auto-write a question…`
+                }
+                rows={3}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none transition-colors"
+              />
+            </div>
+
+            {/* ── MCQ Options with AI generate button */}
             {form.type === "mcq" && (
               <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Options (A–D)</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs text-slate-400">Options (A – D)</label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateMcqOptions}
+                    disabled={genAnswer}
+                    className="flex items-center gap-1.5 rounded-md bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/30 px-2.5 py-1 text-xs font-medium text-violet-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {genAnswer
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <Sparkles className="h-3 w-3" />}
+                    {genAnswer ? "Generating…" : "AI Fill Options"}
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {form.options.map((opt, j) => (
-                    <Input
-                      key={j}
-                      value={opt}
-                      onChange={(e) => {
-                        const opts = [...form.options];
-                        opts[j] = e.target.value;
-                        setForm((f) => ({ ...f, options: opts }));
-                      }}
-                      placeholder={`Option ${String.fromCharCode(65 + j)}`}
-                      className="bg-white/5 border-white/10 text-white"
-                    />
+                    <div key={j} className="flex items-center gap-2">
+                      <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-500">
+                        {String.fromCharCode(65 + j)}
+                      </span>
+                      <Input
+                        value={opt}
+                        onChange={(e) => {
+                          const opts = [...form.options];
+                          opts[j] = e.target.value;
+                          setForm((f) => ({ ...f, options: opts }));
+                        }}
+                        placeholder={`Option ${String.fromCharCode(65 + j)}`}
+                        className="bg-white/5 border-white/10 text-white placeholder:text-slate-600"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* ── Answer / Model Answer with AI button */}
             <div>
-              <label className="text-xs text-slate-400 mb-1.5 block">
-                {form.type === "mcq" ? "Correct Option (A/B/C/D) *" : "Answer / Model Answer *"}
-              </label>
-              <Input
-                value={form.answer}
-                onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
-                placeholder={form.type === "mcq" ? "e.g. B" : "Model answer…"}
-                className="bg-white/5 border-white/10 text-white"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Subject *</label>
-                <Input
-                  value={form.subject}
-                  onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
-                  placeholder="e.g. Mathematics"
-                  className="bg-white/5 border-white/10 text-white"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Topic</label>
-                <Input
-                  value={form.topic}
-                  onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
-                  placeholder="e.g. Algebra"
-                  className="bg-white/5 border-white/10 text-white"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Difficulty</label>
-                <select
-                  value={form.difficulty}
-                  onChange={(e) => setForm((f) => ({ ...f, difficulty: e.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none"
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-slate-400">
+                  {form.type === "mcq" ? "Correct Option (A / B / C / D) *" : "Answer / Model Answer *"}
+                </label>
+                <button
+                  type="button"
+                  onClick={handleGenerateAnswer}
+                  disabled={genAnswer}
+                  className="flex items-center gap-1.5 rounded-md bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 px-2.5 py-1 text-xs font-medium text-emerald-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
+                  {genAnswer
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Sparkles className="h-3 w-3" />}
+                  {genAnswer ? "Generating…" : "AI Answer"}
+                </button>
               </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Board</label>
+              {form.type === "mcq" ? (
                 <Input
-                  value={form.board}
-                  onChange={(e) => setForm((f) => ({ ...f, board: e.target.value }))}
-                  placeholder="e.g. CBSE"
-                  className="bg-white/5 border-white/10 text-white"
+                  value={form.answer}
+                  onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value.toUpperCase() }))}
+                  placeholder="e.g. B"
+                  maxLength={1}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 uppercase"
                 />
-              </div>
+              ) : (
+                <textarea
+                  value={form.answer}
+                  onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
+                  placeholder={
+                    form.text
+                      ? `Enter model answer, or click "AI Answer" above…`
+                      : `Enter the question first, then click "AI Answer" to auto-generate…`
+                  }
+                  rows={form.type === "long" ? 4 : 2}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none transition-colors"
+                />
+              )}
             </div>
-            <div className="flex gap-2 pt-2">
+
+            {/* ── Action buttons */}
+            <div className="flex gap-2 pt-1">
               <Button onClick={handleAdd} className="flex-1 bg-indigo-600 hover:bg-indigo-500">
                 Add to Bank
               </Button>
@@ -375,6 +608,7 @@ export function QuestionBankPage() {
                 Cancel
               </Button>
             </div>
+
           </div>
         </DialogContent>
       </Dialog>
