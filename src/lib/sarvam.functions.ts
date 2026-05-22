@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 
 // Server-only proxy. The upstream key and provider never reach the browser.
 const UPSTREAM_URL = "https://api.sarvam.ai/v1/chat/completions";
-const UPSTREAM_KEY = process.env.SARVAM_API_KEY ?? "";
 const UPSTREAM_MODEL = "sarvam-m";
 
 // Capped at 2048 — the maximum allowed by the Sarvam starter plan.
@@ -16,11 +15,15 @@ export const aiChat = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data }) => {
+    const key = process.env.SARVAM_API_KEY ?? "";
+    if (!key) {
+      throw new Error("SARVAM_API_KEY is not configured. Please add it in the Secrets panel.");
+    }
     const res = await fetch(UPSTREAM_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${UPSTREAM_KEY}`,
+        Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
         model: UPSTREAM_MODEL,
