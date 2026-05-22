@@ -144,17 +144,19 @@ export async function generatePaper(brief: GenerateBrief): Promise<Paper> {
   });
   const parsed = extractJson(content) as {
     instructions?: string[];
+    translatedHeader?: { schoolName?: string; examName?: string; className?: string; subject?: string };
     questions: Array<Omit<Question, "id">>;
   };
   const questions: Question[] = (parsed.questions || []).map((q) => ({ ...q, id: newId() }));
+  const th = parsed.translatedHeader || {};
   const paper: Paper = {
     id: newId(),
     createdAt: Date.now(),
     meta: {
-      schoolName: brief.schoolName,
-      className: brief.className,
-      subject: brief.subject,
-      examName: brief.examName,
+      schoolName: th.schoolName || brief.schoolName,
+      className: th.className || brief.className,
+      subject: th.subject || brief.subject,
+      examName: th.examName || brief.examName,
       durationMinutes: brief.durationMinutes,
       totalMarks: brief.totalMarks,
       instructions: parsed.instructions || [
