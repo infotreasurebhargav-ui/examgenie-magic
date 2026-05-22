@@ -9,29 +9,26 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
 
     const CLONE_WIDTH_PX = 820;
 
-    // Clone the source element (works even when source is in a hidden tab)
+    // Clone so we can restyle without touching the live preview
     const clone = el.cloneNode(true) as HTMLElement;
 
-    // Mount clone in an invisible-but-rendered container.
-    // Using opacity:0 + position:absolute at top:0 ensures the browser
-    // fully lays out and computes styles — unlike left:-99999px which can
-    // cause html2canvas to misread positions.
+    // Place the clone just off the LEFT edge of the viewport (fixed, not far-off).
+    // IMPORTANT: never use opacity:0 or visibility:hidden — html2canvas computes
+    // inherited opacity and renders everything transparent if a parent is opacity:0.
     const host = document.createElement("div");
     host.style.cssText = [
-      "position:absolute",
+      "position:fixed",
       "top:0",
-      "left:0",
+      `left:-${CLONE_WIDTH_PX + 20}px`,
       `width:${CLONE_WIDTH_PX}px`,
-      "opacity:0",
-      "pointer-events:none",
-      "z-index:-9999",
       "background:#ffffff",
+      "pointer-events:none",
+      "z-index:9999",
     ].join(";");
     host.appendChild(clone);
     document.body.appendChild(host);
 
-    // Target the inner .paper-sheet so we capture only the white paper,
-    // not any wrapper divs that may carry dark-theme styles.
+    // Style the inner paper element for clean PDF output
     const paper = clone.querySelector<HTMLElement>(".paper-sheet") ?? clone;
     paper.style.width = `${CLONE_WIDTH_PX}px`;
     paper.style.maxWidth = "none";
@@ -39,10 +36,9 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
     paper.style.boxShadow = "none";
     paper.style.borderRadius = "0";
 
-    // Two animation frames + 250 ms lets the browser fully paint fonts and
-    // resolve any pending CSS variable calculations before we capture.
+    // Two rAF + 300 ms: lets the browser fully paint, resolve CSS vars and fonts
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 300));
 
     const A4_W = 210;
     const A4_H = 297;
@@ -65,7 +61,7 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
       const mmPerPx = CONTENT_W / canvas.width;
       const pagePxH = Math.floor(CONTENT_H / mmPerPx);
 
-      // Compute page-break positions relative to the paper element itself
+      // Compute safe page-break positions relative to the paper element
       const paperRect = paper.getBoundingClientRect();
       const sectionEls = Array.from(paper.querySelectorAll<HTMLElement>("[data-pdf-section]"));
       const safeBreaks = new Set<number>([0]);

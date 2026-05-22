@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, GripVertical } from "lucide-react";
 import type { Paper, Question, QuestionType } from "@/lib/paper-types";
 import { newId } from "@/lib/paper-types";
 
@@ -41,6 +41,46 @@ export function PaperEditor({ paper, onChange }: Props) {
           <Input value={paper.meta.subject} onChange={(e) => updateMeta({ subject: e.target.value })} placeholder="Subject" />
           <Input type="number" value={paper.meta.durationMinutes} onChange={(e) => updateMeta({ durationMinutes: +e.target.value })} placeholder="Duration" />
           <Input type="number" value={paper.meta.totalMarks} onChange={(e) => updateMeta({ totalMarks: +e.target.value })} placeholder="Total marks" />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-surface p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">General Instructions</div>
+          <button
+            type="button"
+            onClick={() => updateMeta({ instructions: [...paper.meta.instructions, ""] })}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-indigo-400 hover:bg-indigo-500/10"
+          >
+            <Plus className="h-3 w-3" /> Add
+          </button>
+        </div>
+        <div className="space-y-2">
+          {paper.meta.instructions.map((instr, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+              <Input
+                value={instr}
+                onChange={(e) => {
+                  const updated = [...paper.meta.instructions];
+                  updated[i] = e.target.value;
+                  updateMeta({ instructions: updated });
+                }}
+                className="h-8 text-sm"
+                placeholder={`Instruction ${i + 1}`}
+              />
+              <button
+                type="button"
+                onClick={() => updateMeta({ instructions: paper.meta.instructions.filter((_, j) => j !== i) })}
+                className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {paper.meta.instructions.length === 0 && (
+            <p className="text-xs text-muted-foreground">No instructions — click Add to insert one.</p>
+          )}
         </div>
       </div>
 
