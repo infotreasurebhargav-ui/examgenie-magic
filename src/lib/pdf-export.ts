@@ -1,23 +1,48 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas-pro";
 
-// Renders the full element as one HD canvas then slices it into A4 pages.
-// This avoids per-section html2canvas issues (flex layout, list markers, etc.)
-// that caused the last few questions to lose styling.
 export async function exportElementToPdf(el: HTMLElement, filename: string) {
   try {
-    if (typeof document !== "undefined" && (document as Document & { fonts?: { ready: Promise<unknown> } }).fonts) {
-      try { await (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready; } catch {}
+    if (document.fonts) {
+      try { await document.fonts.ready; } catch {}
     }
 
     const CLONE_WIDTH_PX = 820;
+
+    // Clone the source element (works even when source is in a hidden tab)
     const clone = el.cloneNode(true) as HTMLElement;
+
+    // Mount clone in an invisible-but-rendered container.
+    // Using opacity:0 + position:absolute at top:0 ensures the browser
+    // fully lays out and computes styles — unlike left:-99999px which can
+    // cause html2canvas to misread positions.
     const host = document.createElement("div");
-    host.style.cssText = `position:fixed;left:-99999px;top:0;width:${CLONE_WIDTH_PX}px;background:#ffffff;`;
-    clone.style.cssText += `;width:${CLONE_WIDTH_PX}px;max-width:none;margin:0;box-shadow:none;border-radius:0;`;
+    host.style.cssText = [
+      "position:absolute",
+      "top:0",
+      "left:0",
+      `width:${CLONE_WIDTH_PX}px`,
+      "opacity:0",
+      "pointer-events:none",
+      "z-index:-9999",
+      "background:#ffffff",
+    ].join(";");
     host.appendChild(clone);
     document.body.appendChild(host);
-    await new Promise((r) => setTimeout(r, 100));
+
+    // Target the inner .paper-sheet so we capture only the white paper,
+    // not any wrapper divs that may carry dark-theme styles.
+    const paper = clone.querySelector<HTMLElement>(".paper-sheet") ?? clone;
+    paper.style.width = `${CLONE_WIDTH_PX}px`;
+    paper.style.maxWidth = "none";
+    paper.style.margin = "0";
+    paper.style.boxShadow = "none";
+    paper.style.borderRadius = "0";
+
+    // Two animation frames + 250 ms lets the browser fully paint fonts and
+    // resolve any pending CSS variable calculations before we capture.
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    await new Promise((r) => setTimeout(r, 250));
 
     const A4_W = 210;
     const A4_H = 297;
@@ -29,7 +54,7 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
     try {
-      const canvas = await html2canvas(clone, {
+      const canvas = await html2canvas(paper, {
         scale: SCALE,
         backgroundColor: "#ffffff",
         useCORS: true,
@@ -40,17 +65,16 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
       const mmPerPx = CONTENT_W / canvas.width;
       const pagePxH = Math.floor(CONTENT_H / mmPerPx);
 
-      // Find safe page-break positions between data-pdf-section elements
-      // so we avoid cutting through the middle of a question where possible.
-      const sectionEls = Array.from(clone.querySelectorAll<HTMLElement>("[data-pdf-section]"));
+      // Compute page-break positions relative to the paper element itself
+      const paperRect = paper.getBoundingClientRect();
+      const sectionEls = Array.from(paper.querySelectorAll<HTMLElement>("[data-pdf-section]"));
       const safeBreaks = new Set<number>([0]);
       for (const sec of sectionEls) {
-        const top = Math.round(sec.getBoundingClientRect().top - host.getBoundingClientRect().top);
-        safeBreaks.add(Math.max(0, top * SCALE));
+        const top = Math.round((sec.getBoundingClientRect().top - paperRect.top) * SCALE);
+        safeBreaks.add(Math.max(0, top));
       }
       const breaksSorted = Array.from(safeBreaks).sort((a, b) => a - b);
 
-      // Build page slices: try to cut at a safe break just before the page boundary.
       const slices: { start: number; end: number }[] = [];
       let offset = 0;
       while (offset < canvas.height) {
@@ -59,7 +83,6 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
           slices.push({ start: offset, end: canvas.height });
           break;
         }
-        // Find the latest safe break that is <= ideal
         let cut = ideal;
         for (let i = breaksSorted.length - 1; i >= 0; i--) {
           if (breaksSorted[i] > offset && breaksSorted[i] <= ideal) {
@@ -81,14 +104,13 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, slice.width, slice.height);
         ctx.drawImage(canvas, 0, start, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-        const sliceHmm = sliceH * mmPerPx;
         pdf.addImage(
           slice.toDataURL("image/jpeg", 0.95),
           "JPEG",
           MARGIN,
           MARGIN,
           CONTENT_W,
-          sliceHmm,
+          sliceH * mmPerPx,
         );
       });
     } finally {

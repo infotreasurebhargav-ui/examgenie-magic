@@ -274,9 +274,6 @@ function Home() {
 
   const sheetRef    = useRef<HTMLDivElement>(null);
   const sheetKeyRef = useRef<HTMLDivElement>(null);
-  // Hidden render refs for PDF — always in DOM so they're always available
-  const pdfPaperRef  = useRef<HTMLDivElement>(null);
-  const pdfAnswerRef = useRef<HTMLDivElement>(null);
 
   const handleLogin  = () => setLoggedIn(true);
   const handleLogout = () => { logout(); setLoggedIn(false); };
@@ -329,7 +326,7 @@ function Home() {
   // ── PDF download ──────────────────────────────────────────────────────────
   const handleDownloadPdf = async (withAnswerKey = false) => {
     if (!paper) return;
-    const target = withAnswerKey ? pdfAnswerRef.current : pdfPaperRef.current;
+    const target = withAnswerKey ? sheetKeyRef.current : sheetRef.current;
     if (!target) return;
     setPdfLoading(true);
     const toastId = toast.loading(withAnswerKey ? "Preparing Answer Key PDF…" : "Preparing PDF…");
@@ -668,29 +665,6 @@ function Home() {
         </main>
       </div>
 
-      {/* ── Hidden off-screen renders for clean PDF capture ─────────────────── */}
-      {paper && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "fixed",
-            left: "-9999px",
-            top: 0,
-            width: "820px",
-            pointerEvents: "none",
-            zIndex: -1,
-          }}
-        >
-          {/* Question paper (no answers) */}
-          <div ref={pdfPaperRef}>
-            <PaperSheet paper={paper} showAnswers={false} />
-          </div>
-          {/* With answer key */}
-          <div ref={pdfAnswerRef}>
-            <PaperSheet paper={paper} showAnswers />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
