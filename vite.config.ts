@@ -86,6 +86,11 @@ export default defineConfig(({ command }) => {
       port: 5000,
       strictPort: true,
       allowedHosts: true,
+      watch: {
+        // Exclude bun's package cache — it contains tsconfigs and html files
+        // that Vite's watcher picks up and causes endless program reloads.
+        ignored: ["**/.cache/**", "**/node_modules/**", "**/.git/**"],
+      },
     },
   };
 });
