@@ -38,6 +38,7 @@ function buildPrompt(b: GenerateBrief): string {
   const breakdown = b.types
     .map((t) => `- ${t.count} ${t.type.toUpperCase()} questions, ${t.marksEach} marks each`)
     .join("\n");
+  const lang = b.language || "English";
   return `Create a question paper.
 School: ${b.schoolName}
 Class: ${b.className}
@@ -45,7 +46,7 @@ Subject: ${b.subject}
 Exam: ${b.examName}
 Duration: ${b.durationMinutes} minutes
 Total Marks: ${b.totalMarks}
-Language: ${b.language || "English"}
+OUTPUT LANGUAGE: ${lang}. Write ALL text (instructions, questions, options, answers) in ${lang} using its native script. Use formal, grammatically perfect, textbook-quality ${lang}. Do not mix English unless the term is a standard proper noun.
 Difficulty: ${b.difficulty || "mixed"}
 Topics / syllabus focus: ${b.topics || "general syllabus"}
 Question breakdown:
