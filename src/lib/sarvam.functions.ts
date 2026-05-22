@@ -35,6 +35,21 @@ export const aiChat = createServerFn({ method: "POST" })
       throw new Error(`Generation service unavailable (${res.status})`);
     }
     const json = await res.json();
-    const content: string = json?.choices?.[0]?.message?.content ?? "";
+    const msg = json?.choices?.[0]?.message ?? {};
+    let content: string = (msg.content ?? "").toString();
+    // Strip <think>...</think> blocks some models emit inline
+    content = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    if (!content && typeof msg.reasoning_content === "string") {
+      content = msg.reasoning_content.trim();
+    }
+    if (!content) {
+      const finish = json?.choices?.[0]?.finish_reason;
+      console.error("Empty content from upstream", finish, JSON.stringify(json).slice(0, 500));
+      throw new Error(
+        finish === "length"
+          ? "Response was truncated. Try fewer questions or a shorter prompt."
+          : "Empty response from generation service. Please try again.",
+      );
+    }
     return { content };
   });
