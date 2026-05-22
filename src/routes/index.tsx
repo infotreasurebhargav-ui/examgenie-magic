@@ -490,20 +490,22 @@ function Home() {
         </header>
 
         {/* ── Main ─────────────────────────────────────────────────────────── */}
-        <main className="flex-1 p-4 sm:p-6">
+        <main className="flex-1">
 
-          {activeSection === "bank"      && <QuestionBankPage />}
-          {activeSection === "students"  && <StudentsPage />}
-          {activeSection === "analytics" && <AnalyticsPage />}
+          {activeSection === "bank"      && <div className="p-4 sm:p-6"><QuestionBankPage /></div>}
+          {activeSection === "students"  && <div className="p-4 sm:p-6"><StudentsPage /></div>}
+          {activeSection === "analytics" && <div className="p-4 sm:p-6"><AnalyticsPage /></div>}
           {activeSection === "settings"  && (
-            <SettingsPage onSettingsChange={() => setSchoolName(getSettings().schoolName)} />
+            <div className="p-4 sm:p-6">
+              <SettingsPage onSettingsChange={() => setSchoolName(getSettings().schoolName)} />
+            </div>
           )}
 
           {activeSection === "generate" && (
             <>
               {/* Step 1: Configure */}
               {step === "configure" && (
-                <div className="mx-auto max-w-5xl">
+                <div className="mx-auto max-w-5xl p-4 sm:p-6">
                   <div className="mb-8 text-center">
                     <h1 className="text-3xl font-bold sm:text-5xl">
                       Craft exam papers in{" "}
@@ -547,7 +549,7 @@ function Home() {
 
               {/* Step 2: Edit & Preview */}
               {step === "review" && paper && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3 p-2 sm:p-3 lg:p-4">
                   {/* Share URL banner */}
                   {shareUrl && (
                     <div className="flex items-center gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm">
@@ -592,7 +594,7 @@ function Home() {
                   </div>
 
                   {/* ── Split view: Editor + Preview ─────────────────────── */}
-                  <div className="grid gap-4 lg:grid-cols-[400px_1fr] xl:grid-cols-[440px_1fr]">
+                  <div className="grid gap-3 lg:grid-cols-[480px_1fr] xl:grid-cols-[540px_1fr] 2xl:grid-cols-[600px_1fr]">
                     {/* Editor panel */}
                     <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/3">
                       <div className="flex items-center gap-2 border-b border-white/10 bg-white/5 px-4 py-3">
@@ -602,7 +604,7 @@ function Home() {
                           {paper.questions.length} Qs
                         </span>
                       </div>
-                      <div className="overflow-y-auto p-4" style={{ maxHeight: "calc(100vh - 160px)" }}>
+                      <div className="overflow-y-auto p-4" style={{ height: "calc(100vh - 140px)" }}>
                         <PaperEditor paper={paper} onChange={setPaper} />
                       </div>
                     </div>
@@ -625,7 +627,7 @@ function Home() {
                           </Tabs>
                         </div>
                       </div>
-                      <div className="overflow-y-auto p-2 sm:p-3" style={{ maxHeight: "calc(100vh - 160px)" }}>
+                      <div className="overflow-y-auto p-2 sm:p-3" style={{ height: "calc(100vh - 140px)" }}>
                         <Tabs value={showAnswers ? "key" : "paper"}>
                           <TabsContent value="paper" className="mt-0">
                             <PaperSheet ref={sheetRef} paper={paper} showAnswers={false} />

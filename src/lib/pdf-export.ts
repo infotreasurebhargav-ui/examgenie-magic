@@ -1,20 +1,64 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas-pro";
 
+/**
+ * Walk up the DOM from `el` and temporarily un-hide any ancestor
+ * (or the element itself) that has display:none or visibility:hidden.
+ * Returns a function that restores the original values.
+ *
+ * This is critical for Radix UI TabsContent — inactive tabs get a
+ * `hidden` attribute (= display:none) so html2canvas captures nothing.
+ */
+function forceVisibleChain(el: HTMLElement): () => void {
+  const restores: Array<() => void> = [];
+  let node: HTMLElement | null = el;
+  while (node && node !== document.documentElement) {
+    const n = node;
+    const cs = window.getComputedStyle(n);
+    if (cs.display === "none") {
+      const prev = n.style.display;
+      const hadHidden = n.hasAttribute("hidden");
+      n.removeAttribute("hidden");
+      n.style.display = "block";
+      restores.push(() => {
+        n.style.display = prev;
+        if (hadHidden) n.setAttribute("hidden", "");
+      });
+    }
+    if (cs.visibility === "hidden") {
+      const prev = n.style.visibility;
+      n.style.visibility = "visible";
+      restores.push(() => { n.style.visibility = prev; });
+    }
+    node = node.parentElement;
+  }
+  return () => restores.forEach((r) => r());
+}
+
 export async function exportElementToPdf(el: HTMLElement, filename: string) {
   try {
     if (document.fonts) {
       try { await document.fonts.ready; } catch {}
     }
 
+    // 1 ── Locate the paper surface
+    const paper = el.querySelector<HTMLElement>(".paper-sheet") ?? el;
+
+    // 2 ── Temporarily force the element (and any hidden Radix ancestor) visible
+    //      so we can clone it with all computed styles intact.
+    const restoreVisible = forceVisibleChain(paper);
+
+    // 3 ── Clone the element WHILE it is visible
+    const clone = paper.cloneNode(true) as HTMLElement;
+
+    // 4 ── Restore original visibility immediately — we have the clone now
+    restoreVisible();
+
+    // 5 ── Mount the clone just off the LEFT edge of the viewport.
+    //      NEVER use opacity:0 or visibility:hidden on the host —
+    //      html2canvas multiplies ancestor opacity and renders everything
+    //      transparent. Fixed + left:-N is safe.
     const CLONE_WIDTH_PX = 820;
-
-    // Clone so we can restyle without touching the live preview
-    const clone = el.cloneNode(true) as HTMLElement;
-
-    // Place the clone just off the LEFT edge of the viewport (fixed, not far-off).
-    // IMPORTANT: never use opacity:0 or visibility:hidden — html2canvas computes
-    // inherited opacity and renders everything transparent if a parent is opacity:0.
     const host = document.createElement("div");
     host.style.cssText = [
       "position:fixed",
@@ -28,16 +72,17 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
     host.appendChild(clone);
     document.body.appendChild(host);
 
-    // Style the inner paper element for clean PDF output
-    const paper = clone.querySelector<HTMLElement>(".paper-sheet") ?? clone;
-    paper.style.width = `${CLONE_WIDTH_PX}px`;
-    paper.style.maxWidth = "none";
-    paper.style.margin = "0";
-    paper.style.boxShadow = "none";
-    paper.style.borderRadius = "0";
+    // 6 ── Clean up clone styles for PDF capture
+    clone.style.width = `${CLONE_WIDTH_PX}px`;
+    clone.style.maxWidth = "none";
+    clone.style.margin = "0";
+    clone.style.boxShadow = "none";
+    clone.style.borderRadius = "0";
 
-    // Two rAF + 300 ms: lets the browser fully paint, resolve CSS vars and fonts
-    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    // 7 ── Wait two animation frames + 300 ms for browser to fully paint
+    await new Promise<void>((r) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => r())),
+    );
     await new Promise((r) => setTimeout(r, 300));
 
     const A4_W = 210;
@@ -50,7 +95,7 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
     try {
-      const canvas = await html2canvas(paper, {
+      const canvas = await html2canvas(clone, {
         scale: SCALE,
         backgroundColor: "#ffffff",
         useCORS: true,
@@ -61,12 +106,16 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
       const mmPerPx = CONTENT_W / canvas.width;
       const pagePxH = Math.floor(CONTENT_H / mmPerPx);
 
-      // Compute safe page-break positions relative to the paper element
-      const paperRect = paper.getBoundingClientRect();
-      const sectionEls = Array.from(paper.querySelectorAll<HTMLElement>("[data-pdf-section]"));
+      // Page-break positions at [data-pdf-section] boundaries
+      const cloneRect = clone.getBoundingClientRect();
+      const sectionEls = Array.from(
+        clone.querySelectorAll<HTMLElement>("[data-pdf-section]"),
+      );
       const safeBreaks = new Set<number>([0]);
       for (const sec of sectionEls) {
-        const top = Math.round((sec.getBoundingClientRect().top - paperRect.top) * SCALE);
+        const top = Math.round(
+          (sec.getBoundingClientRect().top - cloneRect.top) * SCALE,
+        );
         safeBreaks.add(Math.max(0, top));
       }
       const breaksSorted = Array.from(safeBreaks).sort((a, b) => a - b);
@@ -99,14 +148,16 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
         const ctx = slice.getContext("2d")!;
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, slice.width, slice.height);
-        ctx.drawImage(canvas, 0, start, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        ctx.drawImage(
+          canvas,
+          0, start, canvas.width, sliceH,
+          0, 0,     canvas.width, sliceH,
+        );
         pdf.addImage(
           slice.toDataURL("image/jpeg", 0.95),
           "JPEG",
-          MARGIN,
-          MARGIN,
-          CONTENT_W,
-          sliceH * mmPerPx,
+          MARGIN, MARGIN,
+          CONTENT_W, sliceH * mmPerPx,
         );
       });
     } finally {
