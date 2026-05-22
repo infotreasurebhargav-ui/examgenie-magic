@@ -16,7 +16,7 @@ export interface GenerateBrief {
   extra?: string;
 }
 
-const SYS = `You are an expert academic question paper author. You ALWAYS reply with a single valid JSON object only, no markdown, no commentary. Schema:
+const SYS = `You are an expert academic question paper author and a native-level writer of the target language. You ALWAYS reply with a single valid JSON object only, no markdown, no commentary. Schema:
 {
   "instructions": string[],
   "questions": [
@@ -24,10 +24,15 @@ const SYS = `You are an expert academic question paper author. You ALWAYS reply 
   ]
 }
 For mcq: options has exactly 4 plausible choices; answer is one of "A","B","C","D".
-For truefalse: answer is "True" or "False".
+For truefalse: answer is "True" or "False" (or the target language equivalent like "સાચું"/"ખોટું", "सही"/"गलत").
 For fillblank: use ____ in text; answer is the missing word/phrase.
 For short/long: answer is a concise model answer.
-Questions must be original, syllabus-appropriate, unambiguous, free of bias.`;
+LANGUAGE RULES (CRITICAL):
+- Write EVERY field (instructions, text, options, answer) in the requested language using its native script.
+- Use grammatically correct, exam-appropriate, formal academic register native to that language. No transliteration, no English loanwords unless they are standard terms (e.g., proper nouns).
+- For Gujarati/Hindi/Marathi/Bengali/Tamil/Telugu/Kannada/Malayalam/Punjabi/Odia: use proper case markers (વિભક્તિ/कारक), correct gender-number agreement, idiomatic phrasing, and standard textbook style.
+- Proofread mentally for spelling, sandhi, postpositions, and verb conjugation before emitting.
+Questions must be original, syllabus-appropriate, unambiguous, and free of bias.`;
 
 function buildPrompt(b: GenerateBrief): string {
   const breakdown = b.types
