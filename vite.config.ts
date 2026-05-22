@@ -8,13 +8,13 @@ import obfuscatorPlugin from "rollup-plugin-obfuscator";
 export default defineConfig(({ command }) => {
   const isProd = command === "build";
 
-  return {
-    plugins: [
-      tailwindcss(),
-      tsconfigPaths({ projects: ["./tsconfig.json"] }),
-      tanstackStart(),
-      react(),
-      isProd &&
+  // Obfuscator must only run on the CLIENT bundle — never on the SSR/server
+  // bundle. Applying it to the server side breaks Node.js startup because:
+  //   1. debugProtectionInterval creates an infinite setInterval
+  //   2. self-defending code interferes with require/import resolution
+  // The `applyToEnvironment` hook (Vite 6+) ensures this is client-only.
+  const clientObfuscator = isProd
+    ? Object.assign(
         obfuscatorPlugin({
           options: {
             compact: true,
@@ -49,6 +49,21 @@ export default defineConfig(({ command }) => {
             unicodeEscapeSequence: false,
           },
         }),
+        {
+          name: "obfuscator-client-only",
+          // applyToEnvironment restricts this plugin to the client build only
+          applyToEnvironment: (env: { name: string }) => env.name === "client",
+        },
+      )
+    : null;
+
+  return {
+    plugins: [
+      tailwindcss(),
+      tsconfigPaths({ projects: ["./tsconfig.json"] }),
+      tanstackStart(),
+      react(),
+      clientObfuscator,
     ].filter(Boolean),
     resolve: {
       alias: {
@@ -87,8 +102,8 @@ export default defineConfig(({ command }) => {
       strictPort: true,
       allowedHosts: true,
       watch: {
-        // Exclude bun's package cache — it contains tsconfigs and html files
-        // that Vite's watcher picks up and causes endless program reloads.
+        // Exclude bun's package cache from the file watcher to prevent
+        // endless program reloads caused by tsconfigs inside the cache.
         ignored: ["**/.cache/**", "**/node_modules/**", "**/.git/**"],
       },
     },
