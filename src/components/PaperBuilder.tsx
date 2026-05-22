@@ -8,6 +8,57 @@ import { Plus, Trash2, Wand2, Loader2 } from "lucide-react";
 import type { QuestionType } from "@/lib/paper-types";
 import type { GenerateBrief } from "@/lib/ai-paper";
 
+const INDIA_BOARDS = [
+  {
+    group: "National Boards",
+    boards: [
+      { value: "CBSE", label: "CBSE – Central Board of Secondary Education" },
+      { value: "ICSE/ISC", label: "ICSE / ISC – Council for Indian School Certificate" },
+      { value: "NIOS", label: "NIOS – National Institute of Open Schooling" },
+    ],
+  },
+  {
+    group: "International (India)",
+    boards: [
+      { value: "IB (MYP/DP)", label: "IB – International Baccalaureate (MYP/DP)" },
+      { value: "Cambridge IGCSE/A-Level", label: "Cambridge – IGCSE / A-Level" },
+    ],
+  },
+  {
+    group: "State Boards",
+    boards: [
+      { value: "GSEB (Gujarat)", label: "GSEB – Gujarat Secondary & Higher Secondary" },
+      { value: "MSBSHSE (Maharashtra)", label: "MSBSHSE – Maharashtra State Board" },
+      { value: "TNBSE (Tamil Nadu)", label: "TNBSE – Tamil Nadu Board" },
+      { value: "KSEEB (Karnataka)", label: "KSEEB – Karnataka Secondary Education" },
+      { value: "KBPE (Kerala)", label: "KBPE – Kerala Board of Public Examinations" },
+      { value: "WBBSE/WBCHSE (West Bengal)", label: "WBBSE / WBCHSE – West Bengal Board" },
+      { value: "UPMSP (Uttar Pradesh)", label: "UPMSP – Uttar Pradesh Madhyamik Shiksha Parishad" },
+      { value: "RBSE (Rajasthan)", label: "RBSE – Rajasthan Board of Secondary Education" },
+      { value: "MPBSE (Madhya Pradesh)", label: "MPBSE – Madhya Pradesh Board" },
+      { value: "BSEB (Bihar)", label: "BSEB – Bihar School Examination Board" },
+      { value: "BSEAP (Andhra Pradesh)", label: "BSEAP – Andhra Pradesh Board" },
+      { value: "TSBIE (Telangana)", label: "TSBIE – Telangana Board of Intermediate Education" },
+      { value: "PSEB (Punjab)", label: "PSEB – Punjab School Education Board" },
+      { value: "HBSE (Haryana)", label: "HBSE – Haryana Board of School Education" },
+      { value: "HPBOSE (Himachal Pradesh)", label: "HPBOSE – Himachal Pradesh Board" },
+      { value: "UBSE (Uttarakhand)", label: "UBSE – Uttarakhand Board of School Education" },
+      { value: "JAC (Jharkhand)", label: "JAC – Jharkhand Academic Council" },
+      { value: "CHSE (Odisha)", label: "CHSE – Council of Higher Secondary Education, Odisha" },
+      { value: "SEBA/AHSEC (Assam)", label: "SEBA / AHSEC – Assam Board" },
+      { value: "CGBSE (Chhattisgarh)", label: "CGBSE – Chhattisgarh Board" },
+      { value: "GBSHSE (Goa)", label: "GBSHSE – Goa Board of Secondary & Higher Secondary" },
+      { value: "JKBOSE (J&K)", label: "JKBOSE – J&K Board of School Education" },
+      { value: "DBSE (Delhi)", label: "DBSE – Delhi Board of School Education" },
+      { value: "BSEH (Manipur)", label: "BSEM – Board of Secondary Education Manipur" },
+      { value: "MBSE (Meghalaya)", label: "MBOSE – Meghalaya Board of School Education" },
+      { value: "NBSE (Nagaland)", label: "NBSE – Nagaland Board of School Education" },
+      { value: "TBSE (Tripura)", label: "TBSE – Tripura Board of Secondary Education" },
+      { value: "COHSEM (Manipur)", label: "COHSEM – Council of Higher Secondary Education Manipur" },
+    ],
+  },
+];
+
 const TYPE_LABEL: Record<QuestionType, string> = {
   mcq: "Multiple Choice",
   short: "Short Answer",
@@ -31,6 +82,7 @@ export function PaperBuilder({ onGenerate, loading }: BuilderProps) {
   const [topics, setTopics] = useState("");
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard" | "mixed">("mixed");
   const [language, setLanguage] = useState("English");
+  const [board, setBoard] = useState("CBSE");
   const [extra, setExtra] = useState("");
   const [types, setTypes] = useState<GenerateBrief["types"]>([
     { type: "mcq", count: 10, marksEach: 1 },
@@ -52,7 +104,7 @@ export function PaperBuilder({ onGenerate, loading }: BuilderProps) {
         if (!schoolName.trim()) return;
         onGenerate({
           schoolName, className, subject, examName,
-          durationMinutes: duration, totalMarks, topics, difficulty, language, extra, types,
+          durationMinutes: duration, totalMarks, topics, difficulty, language, board, extra, types,
         });
       }}
     >
@@ -67,6 +119,23 @@ export function PaperBuilder({ onGenerate, loading }: BuilderProps) {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {["English","Hindi","Bengali","Tamil","Telugu","Marathi","Gujarati","Kannada","Malayalam","Punjabi","Odia"].map((l)=>(<SelectItem key={l} value={l}>{l}</SelectItem>))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Board / Curriculum">
+          <Select value={board} onValueChange={setBoard}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {INDIA_BOARDS.map((group) => (
+                <div key={group.group}>
+                  <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground select-none">
+                    {group.group}
+                  </div>
+                  {group.boards.map((b) => (
+                    <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                  ))}
+                </div>
+              ))}
             </SelectContent>
           </Select>
         </Field>

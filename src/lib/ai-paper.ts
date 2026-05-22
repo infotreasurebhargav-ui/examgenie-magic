@@ -13,6 +13,7 @@ export interface GenerateBrief {
   difficulty?: "easy" | "medium" | "hard" | "mixed";
   types: { type: QuestionType; count: number; marksEach: number }[];
   language?: string;
+  board?: string;
   extra?: string;
 }
 
@@ -56,6 +57,7 @@ Total Marks: ${b.totalMarks}
 OUTPUT LANGUAGE: ${lang}.
 ${nonEnglish ? `Write ALL text (instructions, questions, options, answers) in ${lang} using its native script. Use formal, grammatically perfect, textbook-quality ${lang}. DO NOT mix English. ALSO populate "translatedHeader" with ${lang} translations of schoolName, examName, className and subject.` : ""}
 
+Board / Curriculum: ${b.board || "General"}
 Difficulty: ${b.difficulty || "mixed"}
 Topics / syllabus focus: ${b.topics || "general syllabus"}
 Question breakdown:
