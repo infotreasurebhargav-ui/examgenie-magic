@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 // Server-only proxy. The upstream key and provider never reach the browser.
 const UPSTREAM_URL = "https://api.sarvam.ai/v1/chat/completions";
-const UPSTREAM_KEY = "sk_0fh77312_BrMiRQMzpRkskVKEXdBx4DYX";
+const UPSTREAM_KEY = process.env.SARVAM_API_KEY ?? "";
 const UPSTREAM_MODEL = "sarvam-m";
 
 // Raised from 2048 → 8192 so large papers don't get silently truncated.
