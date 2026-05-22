@@ -31,14 +31,21 @@ const TOKENS_PER_QUESTION: Record<QuestionType, number> = {
   long: 400,      // question + detailed model answer
 };
 
+// sarvam-105b is a reasoning model — it uses internal "thinking" tokens before
+// producing output. Even with reasoning_effort:"low" it consumes ~1500–2500
+// tokens for thinking. We add a 2500-token overhead on top of the output
+// budget so the model has room to actually emit the JSON after reasoning.
+const REASONING_OVERHEAD = 2500;
+
 function calcTokenBudget(brief: GenerateBrief): number {
   const questionTokens = brief.types.reduce(
     (sum, t) => sum + t.count * (TOKENS_PER_QUESTION[t.type] ?? 150),
     0,
   );
-  // 800 overhead: system prompt injection, JSON braces, instructions, translatedHeader
-  // Hard ceiling at 2048 — the max allowed by the Sarvam starter plan.
-  return Math.min(2048, Math.max(800, questionTokens + 800));
+  // 800 structural overhead: JSON braces, instructions array, translatedHeader
+  // + 2500 reasoning overhead for the model's internal chain-of-thought
+  // Hard ceiling at 8192 (raised from 2048 — reasoning models need more).
+  return Math.min(8192, Math.max(3000, questionTokens + 800 + REASONING_OVERHEAD));
 }
 
 // ─── System prompt ────────────────────────────────────────────────────────────
