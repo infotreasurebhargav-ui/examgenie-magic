@@ -9,7 +9,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
 ) {
   const { meta, questions } = paper;
   return (
-    <div ref={ref} className="paper-sheet mx-auto w-full max-w-[820px] rounded-xl p-8 sm:p-12 shadow-2xl print:shadow-none">
+    <div ref={ref} className="paper-sheet mx-auto w-full max-w-[820px] rounded-lg p-6 sm:p-8 shadow-xl print:shadow-none">
       <div data-pdf-section>
         <div className="ribbon mb-5" />
         <div className="text-center">

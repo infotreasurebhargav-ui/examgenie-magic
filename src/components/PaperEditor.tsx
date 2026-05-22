@@ -2,9 +2,18 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
-import type { Paper, Question } from "@/lib/paper-types";
+import type { Paper, Question, QuestionType } from "@/lib/paper-types";
 import { newId } from "@/lib/paper-types";
+
+const TYPE_LABEL: Record<QuestionType, string> = {
+  mcq: "Multiple Choice",
+  short: "Short Answer",
+  long: "Long Answer",
+  truefalse: "True / False",
+  fillblank: "Fill in the Blank",
+};
 
 interface Props { paper: Paper; onChange: (p: Paper) => void }
 
@@ -51,6 +60,25 @@ export function PaperEditor({ paper, onChange }: Props) {
               </button>
               {isOpen && (
                 <div className="space-y-2 border-t border-border p-3">
+                  <Select
+                    value={q.type}
+                    onValueChange={(v) => {
+                      const newType = v as QuestionType;
+                      const patch: Partial<Question> = { type: newType };
+                      if (newType === "mcq" && !q.options) patch.options = ["", "", "", ""];
+                      if (newType !== "mcq") patch.options = undefined;
+                      updateQ(q.id, patch);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(TYPE_LABEL).map(([k, v]) => (
+                        <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Textarea rows={2} value={q.text} onChange={(e) => updateQ(q.id, { text: e.target.value })} />
                   <div className="grid grid-cols-2 gap-2">
                     <Input type="number" value={q.marks} onChange={(e) => updateQ(q.id, { marks: +e.target.value })} placeholder="Marks" />

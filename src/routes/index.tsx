@@ -628,7 +628,7 @@ function Home() {
                           </Tabs>
                         </div>
                       </div>
-                      <div className="overflow-y-auto p-4 sm:p-6" style={{ maxHeight: "calc(100vh - 160px)" }}>
+                      <div className="overflow-y-auto p-2 sm:p-3" style={{ maxHeight: "calc(100vh - 160px)" }}>
                         <Tabs value={showAnswers ? "key" : "paper"}>
                           <TabsContent value="paper" className="mt-0">
                             <PaperSheet ref={sheetRef} paper={paper} showAnswers={false} />
