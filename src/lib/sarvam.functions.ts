@@ -4,7 +4,10 @@ import { createServerFn } from "@tanstack/react-start";
 const UPSTREAM_URL = "https://api.sarvam.ai/v1/chat/completions";
 const UPSTREAM_KEY = "sk_0fh77312_BrMiRQMzpRkskVKEXdBx4DYX";
 const UPSTREAM_MODEL = "sarvam-m";
-const MAX_TOKENS_CAP = 2048;
+
+// Raised from 2048 → 8192 so large papers don't get silently truncated.
+// A 20-question paper with long answers can easily need 4000+ tokens.
+const MAX_TOKENS_CAP = 8192;
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
@@ -25,7 +28,7 @@ export const aiChat = createServerFn({ method: "POST" })
         messages: data.messages,
         temperature: data.temperature ?? 0.4,
         top_p: 1,
-        max_tokens: Math.min(data.max_tokens ?? 2000, MAX_TOKENS_CAP),
+        max_tokens: Math.min(data.max_tokens ?? 4000, MAX_TOKENS_CAP),
       }),
     });
 
@@ -47,7 +50,7 @@ export const aiChat = createServerFn({ method: "POST" })
       console.error("Empty content from upstream", finish, JSON.stringify(json).slice(0, 500));
       throw new Error(
         finish === "length"
-          ? "Response was truncated. Try fewer questions or a shorter prompt."
+          ? "Response was truncated — reduce question count or try again."
           : "Empty response from generation service. Please try again.",
       );
     }
