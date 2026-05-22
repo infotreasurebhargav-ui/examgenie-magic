@@ -8,6 +8,12 @@ import html2canvas from "html2canvas-pro";
 //   single section across pages (rare; only for very long blocks)
 export async function exportElementToPdf(el: HTMLElement, filename: string) {
   try {
+    // Ensure web fonts (Noto Gujarati/Devanagari, Playfair) are fully loaded
+    // before rasterizing — otherwise html2canvas captures fallback glyphs.
+    if (typeof document !== "undefined" && (document as Document & { fonts?: { ready: Promise<unknown> } }).fonts) {
+      try { await (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready; } catch {}
+    }
+
     // Clone the element offscreen at a fixed A4-friendly width so layout is
     // deterministic regardless of the user's viewport.
     const CLONE_WIDTH_PX = 820; // matches PaperSheet max width
@@ -21,6 +27,8 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
     clone.style.borderRadius = "0";
     host.appendChild(clone);
     document.body.appendChild(host);
+    // Give layout/fonts a tick to settle in the offscreen host
+    await new Promise((r) => setTimeout(r, 50));
 
     // A4 in mm
     const A4_W = 210;
