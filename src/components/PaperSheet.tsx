@@ -10,7 +10,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
   const { meta, questions } = paper;
   return (
     <div ref={ref} className="paper-sheet mx-auto w-full max-w-[820px] rounded-xl p-8 sm:p-12 shadow-2xl print:shadow-none">
-      <div className="border-b-2 border-black/80 pb-4 text-center">
+      <div data-pdf-section className="border-b-2 border-black/80 pb-4 text-center">
         <h1 className="text-2xl font-bold uppercase tracking-wide">{meta.schoolName}</h1>
         <div className="mt-1 text-sm">{meta.examName}</div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-sm font-medium">
@@ -25,7 +25,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
       </div>
 
       {meta.instructions.length > 0 && (
-        <div className="mt-4 rounded-md border border-black/20 p-3 text-sm">
+        <div data-pdf-section className="mt-4 rounded-md border border-black/20 p-3 text-sm">
           <div className="mb-1 font-semibold">General Instructions:</div>
           <ol className="ml-5 list-decimal space-y-0.5">
             {meta.instructions.map((s, i) => (<li key={i}>{s}</li>))}
@@ -35,7 +35,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
 
       <ol className="mt-6 space-y-5">
         {questions.map((q, i) => (
-          <li key={q.id} className="break-inside-avoid">
+          <li key={q.id} data-pdf-section className="break-inside-avoid">
             <div className="flex items-start gap-2">
               <span className="font-semibold">Q{i + 1}.</span>
               <div className="flex-1">
@@ -63,7 +63,7 @@ export const PaperSheet = forwardRef<HTMLDivElement, Props>(function PaperSheet(
       </ol>
 
       {showAnswers && (
-        <div className="mt-8 border-t-2 border-dashed border-black/40 pt-4">
+        <div data-pdf-section className="mt-8 border-t-2 border-dashed border-black/40 pt-4">
           <h2 className="mb-2 text-lg font-bold">Answer Key</h2>
           <ol className="ml-5 list-decimal space-y-1 text-sm">
             {questions.map((q) => (<li key={q.id}><span className="font-medium">{q.answer}</span></li>))}
